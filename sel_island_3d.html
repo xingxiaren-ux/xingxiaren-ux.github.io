@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>心靈島 3D</title>
+<style>
+:root{--pn:rgba(255,255,255,.92);--tx:#1d2b2a;--mut:#5b6f6d;--ac:#2a9d8f;--bd:#cfe3e0;--ok:#e3f6ee;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pn:rgba(20,36,34,.92);--tx:#e6f2f0;--mut:#9bb5b1;--ac:#4cc4b4;--bd:#2b4440;--ok:#1d3a33}}
+:root[data-theme="dark"]{--pn:rgba(20,36,34,.92);--tx:#e6f2f0;--mut:#9bb5b1;--ac:#4cc4b4;--bd:#2b4440;--ok:#1d3a33}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0;overflow:hidden;background:#9bd7ee;color:var(--tx);font:15px/1.6 system-ui,-apple-system,"Noto Sans TC","PingFang TC",sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.bar{position:fixed;left:0;right:0;display:flex;gap:6px;padding:8px 10px;flex-wrap:wrap;pointer-events:none}
+.bar>*{pointer-events:auto}
+#top{top:env(safe-area-inset-top,0px)}
+.chip,.tab{background:var(--pn);color:var(--tx);border:1px solid var(--bd);border-radius:999px;padding:6px 13px;font:inherit;font-size:.88rem;cursor:pointer;backdrop-filter:blur(6px)}
+.tab.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.brand{font-weight:700;margin-right:auto;padding:6px 4px;text-shadow:0 1px 3px rgba(255,255,255,.7);color:#134e4a}
+#chips{top:calc(env(safe-area-inset-top,0px) + 46px)}
+#time{bottom:calc(env(safe-area-inset-bottom,0px) + 4px);justify-content:center;align-items:center}
+#time input{width:110px;accent-color:var(--ac)}
+.tag{position:fixed;left:0;top:0;transform:translate(-50%,-100%);background:var(--pn);border:1px solid var(--bd);border-radius:12px;padding:3px 10px;font-size:.8rem;white-space:nowrap;cursor:pointer;color:var(--tx);display:none}
+.tag.on{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac)}
+#sheet{position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 50px);max-width:520px;margin:0 auto;background:var(--pn);border:1px solid var(--bd);border-radius:18px;padding:14px 16px;max-height:46vh;overflow:auto;backdrop-filter:blur(8px);display:none}
+#sheet h2{margin:0 0 2px;font-size:1.1rem}#sheet p{margin:.4em 0}
+.mut{color:var(--mut);font-size:.85rem}
+.btn{display:block;width:100%;margin-top:8px;padding:10px;border-radius:12px;border:1px solid var(--ac);background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.row{display:flex;gap:8px;align-items:center;width:100%;text-align:left;background:transparent;color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:9px 12px;margin:6px 0;font:inherit;cursor:pointer}
+.row.on{border-color:var(--ac);background:var(--ok)}
+.tip{background:var(--ok);border-radius:10px;padding:8px 10px;margin:6px 0}
+#load{position:fixed;inset:0;background:linear-gradient(#7ec8e3,#e6f6f3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:9;transition:opacity .7s;color:#134e4a;text-align:center}
+#load h1{font-size:2.4rem;line-height:1.1;margin:0;letter-spacing:2px}
+#load button{padding:11px 30px;border-radius:999px;border:0;background:#2a9d8f;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top" class="bar"><span class="brand">⛵ 心靈島</span><button class="tab on" data-t="all">全景</button><button class="tab" data-t="task">🎯 任務 <span id="prog">0/5</span></button><button class="tab" data-t="role">選擇角色</button></div>
+<div id="chips" class="bar"></div>
+<div id="tags"></div>
+<div id="sheet"></div>
+<div id="time" class="bar"><button class="chip" id="pp">⏸</button><span class="chip" id="clk">12:00 白天</span><input id="sl" type="range" min="0" max="24" step="0.1" value="12" aria-label="時間"><button class="chip" id="sp">4×</button><button class="chip" id="now">現在</button></div>
+<div id="load"><div style="font-size:3rem">⛵</div><h1>MIND<br>ISLAND.</h1><div class="mut">一起來當島民吧 · 社會情緒學習</div><button id="go">準備出發</button></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ROLES={T:{n:"受困者",e:"🌧️",c:0x6c9bd1,d:"帶著情緒困境的人：練習覺察並說出自己的感受與需要。"},G:{n:"引導者",e:"🧭",c:0x4fae93,d:"傾聽與提問的人：反映情緒、開放提問，不急著給答案。"},S:{n:"解決問題者",e:"🛠️",c:0xe39a4f,d:"徵得同意再行動的人：先聽懂，再一起擬定小步驟。"}};
+const Z=[
+{n:"情緒灣",a:"自我覺察",e:"🌊",p:[-9.2,4.2],npc:"小潮",s:"小潮最近心跳很快、不想說話，卻說不出是怎麼了。",t:{T:"試著說：「我覺得…因為…我需要…」",G:"問：「如果用天氣形容現在的心情，會是什麼？」",S:"先問：「你希望我陪你練習，還是只想有人聽你說？」"},q:"今天你的心情是什麼天氣？"},
+{n:"平靜山",a:"自我管理",e:"⛰️",p:[-7.6,-3.4],npc:"阿焰",s:"阿焰被同學弄壞了作品，氣到想衝過去大吼。",t:{T:"先走開，做 4 次深呼吸，冷靜後再表達。",G:"說：「你很在意那份作品對吧？我們先坐一下。」",S:"一起練習用「我訊息」說出感受與請求。"},q:"生氣時，你的身體會有什麼訊號？"},
+{n:"共感村",a:"社會覺察",e:"🏘️",p:[-.4,-6.2],npc:"米奇",s:"米奇是新來的轉學生，午餐時總是一個人坐在角落。",t:{T:"說：「我有點緊張，慢慢聊可以嗎？」",G:"想像剛轉學的感受：「我可以陪你一下嗎？」",S:"先問他的興趣，再安排他覺得舒服的小互動。"},q:"你曾經是「新來的人」嗎？當時需要什麼？"},
+{n:"橋樑港",a:"人際關係",e:"🌉",p:[8,-1.6],npc:"小海與小浪",s:"兩位好友因誤會吵架，友誼之橋斷了一半。",t:{T:"說：「那天我說得太重了，我很在意我們的友誼。」",G:"輪流傾聽，並複述各自的感受與需要。",S:"徵得雙方同意，約安靜的時間訂下溝通約定。"},q:"上次和朋友和好，是誰先開口？怎麼說的？"},
+{n:"抉擇森林",a:"負責任的決定",e:"🌲",p:[6.8,5.4],npc:"小森",s:"朋友邀小森一起散布班上某人的糗照，說「大家都在玩」。",t:{T:"拒絕並說明：「這會傷害別人，我不想參與。」",G:"說：「你擔心被排擠，也不想傷害別人，你有哪些選擇？」",S:"一起評估後果，並找信任的大人協助被傷害的人。"},q:"「大家都在做」是好理由嗎？為什麼？"}];
+const $=s=>document.querySelector(s);
+const st={role:"T",done:new Set(),cur:-1,hour:12,speed:4,play:true};
+// ---- three ----
+const cv=$("#c"),ren=new THREE.WebGLRenderer({canvas:cv,antialias:true});ren.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(50,1,.1,300);
+const amb=new THREE.AmbientLight(0xffffff,.5),sun=new THREE.DirectionalLight(0xffffff,.9);scene.add(amb,sun);
+const fire=new THREE.PointLight(0xff8a3d,0,14);
+const sm=t=>{t=Math.min(1,Math.max(0,t));return t*t*(3-2*t)};
+function hAt(x,z){const r=Math.hypot(x,z),a=Math.atan2(z,x),rb=13.6*(1+.09*Math.sin(2*a+.6)+.06*Math.sin(3*a+1.3)),d=(rb-r)/rb;
+ let h=d>0?sm(d/.22)*1.1+.06*Math.sin(x*1.7)*Math.cos(z*1.3)*sm(d/.3):-.5*sm(-d/.3)-.1;
+ h-=1.5*Math.exp(-Math.pow(Math.hypot(x-Z[0].p[0],z-Z[0].p[1])/1.8,2));
+ h+=6*Math.pow(Math.max(0,1-Math.hypot(x-Z[1].p[0],z-Z[1].p[1])/4.5),1.3);return Math.max(h,-.6)}
+{const g=new THREE.PlaneGeometry(44,44,110,110);g.rotateX(-Math.PI/2);const p=g.attributes.position,col=[];
+ for(let i=0;i<p.count;i++){const y=hAt(p.getX(i),p.getZ(i));p.setY(i,y);const c=new THREE.Color(y<.3?0xe9d9a6:y<3?0x7cc576:y<5?0x8a8f98:0xf4f6f8);col.push(c.r,c.g,c.b)}
+ g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));g.computeVertexNormals();
+ scene.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,flatShading:true})))}
+const sea=new THREE.Mesh(new THREE.PlaneGeometry(300,300),new THREE.MeshPhongMaterial({color:0x3aa6c8,transparent:true,opacity:.88,shininess:80}));
+sea.rotation.x=-Math.PI/2;sea.position.y=.12;scene.add(sea);
+const mat=c=>new THREE.MeshLambertMaterial({color:c,flatShading:true});
+function put(m,x,z,dy=0){m.position.set(x,hAt(x,z)+dy,z);scene.add(m);return m}
+// 共感村
+[[-2.2,-6.8,0xf2c9a0],[1.6,-7,0xe9a8a0],[-.6,-4.8,0xa8d1ef],[1.8,-5,0xf5e6a1]].forEach(([x,z,c])=>{const g=new THREE.Group();const b=new THREE.Mesh(new THREE.BoxGeometry(1.2,.9,1.2),mat(c));b.position.y=.45;const r=new THREE.Mesh(new THREE.ConeGeometry(1,.7,4),mat(0xc0563b));r.position.y=1.25;r.rotation.y=Math.PI/4;g.add(b,r);put(g,x,z)});
+// 抉擇森林
+[[5.6,4.4],[8,6.2],[5,7],[8.6,3.6],[6.6,8.4],[4.4,5.6]].forEach(([x,z],i)=>{const g=new THREE.Group();const t=new THREE.Mesh(new THREE.CylinderGeometry(.14,.18,.7,6),mat(0x7a5232));t.position.y=.35;const l=new THREE.Mesh(new THREE.ConeGeometry(.75,1.8+i%3*.3,7),mat(0x2f8f4e));l.position.y=1.5;g.add(t,l);put(g,x,z)});
+// 橋樑港：棧橋與小船
+{const pier=new THREE.Mesh(new THREE.BoxGeometry(7,.16,1),mat(0xb07d4a));pier.position.set(12,.34,-1.6);scene.add(pier);
+ const boat=new THREE.Group();const hull=new THREE.Mesh(new THREE.BoxGeometry(1.6,.3,.7),mat(0xffffff));const sail=new THREE.Mesh(new THREE.ConeGeometry(.5,1.2,3),mat(0xff6b6b));sail.position.y=.8;boat.add(hull,sail);boat.position.set(14,.2,1);scene.add(boat);scene.userData.boat=boat}
+// 反思篝火
+const camp=new THREE.Group();camp.position.set(0,hAt(0,0),0);
+for(let i=0;i<6;i++){const s=new THREE.Mesh(new THREE.SphereGeometry(.28,6,5),mat(0x8d8d8d));s.position.set(Math.cos(i*1.047)*1.1,.15,Math.sin(i*1.047)*1.1);camp.add(s)}
+const flame=new THREE.Mesh(new THREE.ConeGeometry(.4,1.1,6),new THREE.MeshBasicMaterial({color:0xff7a2f}));flame.position.y=.6;camp.add(flame,fire);fire.position.y=1;scene.add(camp);
+// 烏雲與徽章
+const clouds=Z.map(z=>{const g=new THREE.Group();[[-.8,0,.8],[0,.3,1.1],[.8,0,.8]].forEach(([x,y,r])=>{const s=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),new THREE.MeshLambertMaterial({color:0x7d8798,transparent:true}));s.position.set(x,y,0);g.add(s)});
+ g.position.set(z.p[0],hAt(...z.p)+4.2,z.p[1]);scene.add(g);return g});
+const badges=Z.map(z=>{const m=new THREE.Mesh(new THREE.TorusGeometry(.7,.14,8,24),new THREE.MeshBasicMaterial({color:0xf2b134}));m.position.set(z.p[0],hAt(...z.p)+3.6,z.p[1]);m.visible=false;scene.add(m);return m});
+// 角色棋子
+const pawn=new THREE.Group();{const b=new THREE.Mesh(new THREE.CylinderGeometry(.35,.5,1,10),mat(0xffffff));b.position.y=.5;const h=new THREE.Mesh(new THREE.SphereGeometry(.4,12,10),mat(0xffe0c2));h.position.y=1.4;pawn.add(b,h)}
+pawn.position.set(1.8,hAt(1.8,1.2),1.2);scene.add(pawn);
+// 相機
+const C={t:.9,p:1.0,d:34,tg:new THREE.Vector3()},Gl={t:.9,p:1.0,d:34,tg:new THREE.Vector3()};
+function aim(i){if(i<0){Object.assign(Gl,{t:.9,p:1.0,d:34});Gl.tg.set(0,0,0)}else{const q=Z[i].p;Gl.tg.set(q[0],hAt(...q),q[1]);Gl.d=13;Gl.p=1.05;Gl.t=Math.atan2(q[1],q[0])+.5}}
+let drag=null,pts=new Map(),pinch=0;
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,e);drag=e});
+cv.addEventListener("pointermove",e=>{if(!pts.has(e.pointerId))return;const o=pts.get(e.pointerId);pts.set(e.pointerId,e);
+ if(pts.size===2){const [a,b]=[...pts.values()],d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);if(pinch)Gl.d=Math.min(60,Math.max(6,Gl.d*pinch/d));pinch=d}
+ else{Gl.t-=(e.clientX-o.clientX)*.006;Gl.p=Math.min(1.45,Math.max(.25,Gl.p-(e.clientY-o.clientY)*.005))}});
+const up=e=>{pts.delete(e.pointerId);pinch=0};cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
+cv.addEventListener("wheel",e=>{e.preventDefault();Gl.d=Math.min(60,Math.max(6,Gl.d*(1+e.deltaY*.001)))},{passive:false});
+// 標籤
+const tags=Z.map((z,i)=>{const d=document.createElement("div");d.className="tag";d.onclick=()=>openZone(i);$("#tags").appendChild(d);return d});
+$("#chips").innerHTML=Z.map((z,i)=>`<button class="chip" data-z="${i}">${z.e} ${z.n}</button>`).join("");
+$("#chips").onclick=e=>{const b=e.target.closest("[data-z]");if(b)openZone(+b.dataset.z)};
+// 面板
+const sheet=$("#sheet");
+function tab(t){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.t===t))}
+function openZone(i){st.cur=i;aim(i);tab("task");const z=Z[i],r=ROLES[st.role],ok=st.done.has(i);
+ sheet.style.display="block";sheet.innerHTML=`<h2>${z.e} ${z.n}</h2><div class="mut">${z.a}　島民：${z.npc}</div><p>${z.s}</p><div class="tip"><b>${r.e} 你是${r.n}：</b><br>${z.t[st.role]}</div><p class="mut">反思篝火：${z.q}</p><button class="btn" id="fin">${ok?"已完成 🏅":"完成任務，讓烏雲散去"}</button>`;
+ $("#fin").onclick=()=>{st.done.add(i);openZone(i)};upd()}
+function openTasks(){tab("task");aim(-1);sheet.style.display="block";sheet.innerHTML=`<h2>🎯 島嶼任務</h2><div class="mut">依序探索五個區域，依你選的角色完成任務。</div>`+Z.map((z,i)=>`<button class="row" data-z="${i}">${z.e} <span><b>${z.n}</b> <span class="mut">${z.a}</span></span><span style="margin-left:auto">${st.done.has(i)?"🏅":"☁️"}</span></button>`).join("");
+ sheet.onclick=e=>{const b=e.target.closest("[data-z]");if(b)openZone(+b.dataset.z)}}
+function openRoles(){tab("role");sheet.style.display="block";sheet.innerHTML=`<h2>選擇角色</h2><div class="mut">不同角色，看見的方法不同。</div>`+Object.entries(ROLES).map(([k,r])=>`<button class="row ${k===st.role?"on":""}" data-r="${k}"><span style="font-size:1.5rem">${r.e}</span><span><b>${r.n}</b><br><span class="mut">${r.d}</span></span></button>`).join("");
+ sheet.onclick=e=>{const b=e.target.closest("[data-r]");if(b){st.role=b.dataset.r;pawn.children.forEach((m,i)=>i===0&&m.material.color.setHex(ROLES[st.role].c));openRoles()}}}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{const t=b.dataset.t;st.cur=-1;if(t==="all"){sheet.style.display="none";aim(-1);tab("all")}else if(t==="task")openTasks();else openRoles()});
+function upd(){$("#prog").textContent=st.done.size+"/5"}
+pawn.children[0].material.color.setHex(ROLES.T.c);
+// 時間
+const sl=$("#sl");
+$("#pp").onclick=()=>{st.play=!st.play;$("#pp").textContent=st.play?"⏸":"▶"};
+$("#sp").onclick=()=>{st.speed=st.speed===1?4:st.speed===4?16:1;$("#sp").textContent=st.speed+"×"};
+$("#now").onclick=()=>{const d=new Date();st.hour=d.getHours()+d.getMinutes()/60};
+sl.oninput=()=>{st.hour=+sl.value};
+const cD=new THREE.Color(0x9bd7ee),cS=new THREE.Color(0xf3a46a),cN=new THREE.Color(0x0b1330),sky=new THREE.Color();
+function lighting(){const h=st.hour,a=(h-6)/12*Math.PI,s=Math.sin(a),day=sm(s*3);
+ sun.position.set(Math.cos(a)*40,Math.max(s,.05)*40,15);sun.intensity=.15+.95*day;amb.intensity=.2+.4*day;
+ sky.copy(cN).lerp(cS,sm(s*4+.5)).lerp(cD,day);scene.background=sky;scene.fog=new THREE.Fog(sky,60,150);document.body.style.background="#"+sky.getHexString();
+ sea.material.color.setHex(0x3aa6c8).multiplyScalar(.25+.75*day);fire.intensity=(1-day)*2.2+.3;
+ const H=Math.floor(h)%24,M=Math.floor(h%1*60);$("#clk").textContent=`${String(H).padStart(2,"0")}:${String(M).padStart(2,"0")} ${h<5||h>=19?"夜晚":h<7?"清晨":h<17?"白天":"黃昏"}`;sl.value=h}
+// 迴圈
+function size(){const w=innerWidth,h=innerHeight;ren.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}addEventListener("resize",size);size();
+const v=new THREE.Vector3(),clk=new THREE.Clock();
+function loop(){requestAnimationFrame(loop);const dt=clk.getDelta(),t=clk.elapsedTime;
+ if(st.play){st.hour=(st.hour+dt*st.speed*.05)%24}lighting();
+ for(const k of["t","p","d"])C[k]+=(Gl[k]-C[k])*.07;C.tg.lerp(Gl.tg,.07);
+ cam.position.set(C.tg.x+C.d*Math.sin(C.p)*Math.cos(C.t),C.tg.y+C.d*Math.cos(C.p),C.tg.z+C.d*Math.sin(C.p)*Math.sin(C.t));cam.lookAt(C.tg);
+ flame.scale.set(1,.85+Math.sin(t*14)*.15,1);fire.intensity*=.9+Math.random()*.2;
+ clouds.forEach((c,i)=>{const dn=st.done.has(i);c.visible=c.scale.x>.02;c.scale.setScalar(dn?Math.max(0,c.scale.x-dt*1.2):1);c.position.y=hAt(...Z[i].p)+4.2+Math.sin(t+i)*.15;badges[i].visible=dn;badges[i].rotation.y=t*2});
+ const tg=st.cur>=0?Z[st.cur].p:[1.8,1.2];pawn.position.x+=(tg[0]+1.3-pawn.position.x)*.04;pawn.position.z+=(tg[1]+.6-pawn.position.z)*.04;pawn.position.y=hAt(pawn.position.x,pawn.position.z)+Math.abs(Math.sin(t*5))*.12;
+ const b=scene.userData.boat;if(b)b.position.y=.2+Math.sin(t*1.5)*.08;
+ Z.forEach((z,i)=>{v.set(z.p[0],hAt(...z.p)+2,z.p[1]).project(cam);const e=tags[i];if(v.z<1){e.style.display="block";e.style.left=(v.x*.5+.5)*innerWidth+"px";e.style.top=(-v.y*.5+.5)*innerHeight+"px";e.className="tag"+(i===st.cur?" on":"");e.textContent=z.e+" "+z.n+(st.done.has(i)?" 🏅":"")}else e.style.display="none"});
+ ren.render(scene,cam)}
+loop();
+$("#go").onclick=()=>{$("#load").style.opacity=0;setTimeout(()=>$("#load").remove(),700);C.d=70;aim(-1)};
+</script>
+</body>
+</html>
